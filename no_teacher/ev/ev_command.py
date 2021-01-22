@@ -33,7 +33,7 @@ class EV:
             print("failed to connect with PC in BlueTooth")
             exit(1)
 
-    def steer(self, steer, speed=SPEED, interval=INTERVAL):
+    def steer(self, s, steer, speed=SPEED, interval=INTERVAL):
         """
         steer the motor by given params for time intarval [ms]
         """
@@ -43,12 +43,12 @@ class EV:
             self.tank.on_for_seconds(-steer, speed, interval / 1000)
 
         data = self._update_direction()
-        self._send(data)
+        s.send(data)
 
         sleep(interval / 1000)
 
     def turn_degrees(self, radian):
-        self.tank.turn_degrees(SPEED, radian * 360 / (2 * math.pi))
+        self.tank.turn_degrees(SPEED, math.degrees(radian))
 
     def on_for_millis(self, millis):
         self.tank.on_for_seconds(0, SPEED, millis / 1000)
@@ -59,10 +59,10 @@ class EV:
     def is_white(self):
         return self.cs.value() > 30
 
-    def _send(self, data):
-        data = str(data).encode()
-        self.socket.send(data)
-        print(data)
+    # def _send(self, data):
+    #     data = str(data).encode()
+    #     self.socket.send(data)
+    #     print(data)
 
     def _update_direction(self):
         current_direction = self.gyro()
