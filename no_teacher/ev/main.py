@@ -1,49 +1,58 @@
-from math import degrees
-from ev_command import EV
-from time import sleep
-import socket
+from asyncio.protocols import Protocol
+from ev_command import EV, SPEED, INTERVAL, DIAMETER
+import asyncio
 
 r = 70  # default
 
 
-def first_drive(ev, s):
+def first_drive(transport):
+    global ev
+    ev = EV()
     while not ev.button.backspace:
-        ev.steer(s, r)
+        move_direction, color = ev.steer(r)
+        transport.write("gyro:{}".format(str(move_direction)).encode())
+        if color:
+            transport.write("color:white")
+        else:
+            transport.write("color:black")
+
     ev.tank.off()
-    s.send('END')
+    transport.write("cmd:END_FIRST".encode())
 
 
-def second_drive(ev, s):
-    while True:
-        direction = s.recv(1024).decode()
-        dist = s.recv(1024).decode()
-        ev.tank.turn_degrees(degrees(direction))
-        ev.tank.on_for_seconds(dist)
+class Client(Protocol):
+    def connection_made(self, transport) -> None:
+        print("Connected Into Server")
+        self.transport = transport
+        self.transport.write("speed:{}".format(SPEED).encode())
+        self.transport.write("interval:{}".format(INTERVAL).encode())
+        self.transport.write("diameter:{}".format(DIAMETER).encode())
+        first_drive(transport)
+        transport.write("cmd:START_SECOND".encode())
+
+    def data_received(self, data) -> None:
+        message = data.decode()
+        (attr, data) = message.partition(':')
+        global ev
+        if attr == "direction":
+            ev.turn_degrees(float(data))
+        elif attr == "dist":
+            ev.on_for_millis(float(data))
 
 
 def main():
-    ev = EV()
+    loop = asyncio.get_event_loop()
+    # ev = EV()
+
+    c = loop.create_connection(Client)
+    connection, addr = loop.run_until_complete(c)
 
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(('xxxx', XXXX))  # IP
-    except:
-        print("failed to connect with PC in BlueTooth")
-        exit(1)
+        loop.run_forever()  # loop the tasks until the server is closed or ^C is sent
+    except KeyboardInterrupt:
+        pass
 
-    first_drive(ev, s)
-    # 何周かしてるうちにどれだけ誤差を少なく座標をプロットできるか
-    # 1周でも十分では
-
-    flag = False
-    while True:
-        if 'Shall I go?' == s.recv(1024).decode():
-            flag = True
-        if ev.button.up and flag:
-            break
-    # 手動でスタート位置まで戻して upボタン、2回目の走行
-    s.send('Go ahead'.encode())
-    second_drive(ev, s)
+    loop.close()
 
 
 if __name__ == '__main__':

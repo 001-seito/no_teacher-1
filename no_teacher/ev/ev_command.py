@@ -1,9 +1,8 @@
-from ev3dev2.motor import Motor, MoveSteering, OUTPUT_B, OUTPUT_C, SpeedPercent, SpeedRPS
+from ev3dev2.motor import MoveSteering, OUTPUT_B, OUTPUT_C, SpeedRPS
 from ev3dev2.sensor.lego import ColorSensor, GyroSensor
 from ev3dev2.button import Button
 
 import math
-import socket
 from time import sleep
 
 # from no_teacher.consts import SPEED, INTERVAL
@@ -13,7 +12,6 @@ DIAMETER = 55  # milli meter
 
 
 class EV:
-
     def __init__(self):
         self.button = Button()
 
@@ -26,14 +24,7 @@ class EV:
         self.gs.reset()
         self.before_direction = self.gyro()
 
-        try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect(('xxxx', XXXX))  # IP
-        except:
-            print("failed to connect with PC in BlueTooth")
-            exit(1)
-
-    def steer(self, s, steer, speed=SPEED, interval=INTERVAL):
+    def steer(self, steer, speed=SPEED, interval=INTERVAL):
         """
         steer the motor by given params for time intarval [ms]
         """
@@ -42,10 +33,9 @@ class EV:
         else:
             self.tank.on_for_seconds(-steer, speed, interval / 1000)
 
-        data = self._update_direction()
-        s.send(data)
-
+        data = (self._update_direction(), not self.is_white())
         sleep(interval / 1000)
+        return data
 
     def turn_degrees(self, radian):
         self.tank.turn_degrees(SPEED, math.degrees(radian))

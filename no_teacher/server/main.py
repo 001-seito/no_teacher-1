@@ -1,83 +1,103 @@
-import socket
+import asyncio
 import math
-from time import sleep
+import numpy
+import matplotlib.pyplot as plt
+import random
 
-from ev3dev2.motor import SpeedRPS
-
-# from no_teacher.consts import SPEED, INTERVAL
-SPEED = SpeedRPS(1.0)
-INTERVAL = 200
-DIAMETER = 55  # milli meter
+TEST_ID = random.randint(0, 1 << 16)
 
 
-def init():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(('', XXXX))
-    s.listen(1)
-    return s
+def convert_data(gyro_data, motor_speed, interval, diameter, colors):
+    step = diameter * math.pi * motor_speed * interval / 1000
+    cx = 0.0
+    cy = 0.0
+
+    positions = [(0.0, 0.0, True)]
+
+    for (degree, color) in zip(gyro_data, colors):
+        dx = step * math.cos(math.radians(degree))
+        dy = step * math.sin(math.radians(degree))
+        cx += dx
+        cy += dy
+        positions.append((cx, cy, color == "black"))
+        plt.plot(cx, cy, '-', color=str(color == "black"), m='o')
+
+    plt.savefig("course_first_drive@{}.png".format(TEST_ID))
+
+    return positions
 
 
-def recv_first_drive_data(socket):
-    # n == 6乗ぐらい？
-    data = []
-    while True:
-        connect, _ = socket.accept()
-        with connect:
-            while True:
-                direction = connect.recv(1024).decode()
-                if direction == 'END':
-                    return data
-                elif not direction:
-                    break
-                else:
-                    data.append(float(direction))
+class Server(asyncio.Protocol):
+    phase = 1
+    gyro_data = []
+    colors = []
+    # motor_speed = None
+    # interval = None
+    # diameter = None
 
+    def connection_made(self, transport):
+        peername = transport.get_extra_info('peername')
+        print('Connection from {}'.format(peername))
+        self.transport = transport
 
-def data_to_position(data):
-    position = [(0.0, 0.0)]
-    x = 0
-    y = 0
-    delta = SPEED * (INTERVAL / 1000) * DIAMETER * 2 * math.pi
-    for d in data:
-        radian = math.radians(d)
-        dx = delta * math.cos(radian)
-        dy = delta * math.sin(radian)
-        x += dx
-        y += dy
-        position.append((x, y))
-    position
+    def data_received(self, data):
+        message = data.decode()
+        (attr, data) = message.partition(':')
+        if self.phase == 0:  # initialize state
+            if attr == "speed":
+                self.motor_speed = float(data)
+            if attr == "interval":
+                self.interval = float(data)
+            if attr == "diameter":
+                self.diameter = float(data)
+            if self.motor_speed != None and self.interval != None and self.diameter != None:
+                self.phase = 1
+        elif self.phase == 1:  # recv first_drive data
+            if attr == "gyro":
+                f = float(data)
+                self.gyro_data.append(f)
+            if attr == "color":
+                self.colors.append(data)
+            if attr == "cmd" and data == "END_FIRST":
+                self.phase = 2
+        elif self.phase == 2:  # serve the second_drive data
+            if attr == "cmd" and data == "START_SECOND":
+                positions = convert_data(self.gyro_data, self.motor_speed,
+                                         self.interval,  self.diameter, self.colors)
+                black_points = []
+                for (x, y, c) in positions:
+                    if c:
+                        black_points.append((x, y))
 
-# あとはこれを numpy matplot に渡して描画
-
-
-def serve_second_drive(socket, position):
-    current_direction = 0.0
-    bx = 0
-    by = 0
-    for (cx, cy) in position:
-        new_direction = math.atan2(cy, cx)
-        distance = math.sqrt((cx - bx) ** 2 + (cy - by) ** 2)
-        turn_radian = new_direction - current_direction
-        socket.send(str(turn_radian).encode())
-        socket.send(str(distance).encode())
-        bx = cx
-        by = cy
+                current_direction = 0.0
+                for i in range(len(black_points) - 1):
+                    (bx, by) = black_points[i]
+                    (cx, cy) = black_points[i + 1]
+                    next_direction = math.degrees(
+                        math.atan2((cy - by), (cx - bx)))
+                    turn_direction = next_direction - current_direction
+                    distance = math.sqrt((cx - bx) ** 2 + (cy - by) ** 2)
+                    self.transport.write("direction:{}".format(turn_direction))
+                    self.transport.write("dist:{}".format(distance))
+                    current_direction = next_direction
 
 
 def main():
-    socket = init()
-    data = recv_first_drive_data(socket)
-    position = data_to_position(data)
+    loop = asyncio.get_event_loop()
+    s = loop.create_server(Server, '127.0.0.1', 50010)  # ip, port
+    server = loop.run_until_complete(s)  # starting server blocking
+    print('Serving on {}'.format(server.sockets[0].getsockname()))
 
-    # plot
-    while True:
-        socket.send('Shall I go?'.encode())
-        sleep(0.2)
-        if 'Go ahead' == socket.recv(1024).decode():
-            break
-    serve_second_drive(socket, position)
+    try:
+        loop.run_forever()  # loop the tasks until the server is closed or ^C is sent
+    except KeyboardInterrupt:
+        pass
+
+    server.close()
+    loop.run_until_complete(server.wait_closed())
+    print("Server succesfully closed")
+    loop.close()
 
 
 if __name__ == '__main__':
     main()
-
