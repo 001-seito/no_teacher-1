@@ -44,8 +44,8 @@ def main():
     loop = asyncio.get_event_loop()
     # ev = EV()
 
-    c = loop.create_connection(Client)
-    connection, addr = loop.run_until_complete(c)
+    c = loop.create_connection(Client, '169.127.0.0', 50010)
+    _ = loop.run_until_complete(c)
 
     try:
         loop.run_forever()  # loop the tasks until the server is closed or ^C is sent
