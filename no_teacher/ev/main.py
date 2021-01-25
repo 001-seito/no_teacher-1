@@ -1,9 +1,7 @@
-from os import read
 from ev_command import EV, SPEED, INTERVAL, DIAMETER
 import asyncio
 
-r = 70  # default
-
+r = 70
 
 def first_drive(writer, ev):
     while not ev.button.backspace:
@@ -50,7 +48,7 @@ def main():
     loop.run_until_complete(client(loop, ev))
 
     try:
-        loop.run_forever()  # loop the tasks until the server is closed or ^C is sent
+        loop.run_forever()
     except KeyboardInterrupt:
         pass
 
