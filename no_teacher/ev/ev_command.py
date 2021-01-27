@@ -6,8 +6,8 @@ import math
 from time import sleep
 
 # from no_teacher.consts import SPEED, INTERVAL
-SPEED = SpeedRPS(1.0)
-INTERVAL = 200
+SPEED = 100
+INTERVAL = 100
 DIAMETER = 55  # milli meter
 
 
